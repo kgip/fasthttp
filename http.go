@@ -1524,7 +1524,10 @@ func (req *Request) Write(w *bufio.Writer) error {
 				if _, err = io.Copy(w, mp.header); err == nil {
 					if err = w.Flush(); err == nil {
 						//send file with zero copy
-						_, err = io.Copy(mp.conn, mp.file)
+						if _, err = io.Copy(mp.conn, mp.file); err == nil {
+							mp.writer.Close()
+							_, err = io.Copy(mp.conn, mp.header)
+						}
 					}
 				}
 			}
@@ -2318,21 +2321,45 @@ func (req *Request) SetTimeout(t time.Duration) {
 }
 
 type MultipartReader struct {
-	header *bytes.Buffer
-	file   *os.File
-	conn   net.Conn
+	header   *bytes.Buffer
+	file     *os.File
+	fileSize int
+	conn     net.Conn
+	writer   *multipart.Writer
 }
 
-func (mr *MultipartReader) CreateFormFile(fieldname, filename string, file *os.File) (*multipart.Writer, error) {
+var errFileNil = errors.New("file can't be nil")
+
+func (mr *MultipartReader) CreateFormFile(fieldname, filename string, file *os.File) error {
+	if file == nil {
+		return errFileNil
+	}
 	header := &bytes.Buffer{}
 	writer := multipart.NewWriter(header)
+	mr.writer = writer
 	_, err := writer.CreateFormFile(fieldname, filename)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	mr.header = header
 	mr.file = file
-	return nil, nil
+	fileInfo, err := os.Stat(mr.file.Name())
+	if err == nil {
+		mr.fileSize = int(fileInfo.Size())
+	}
+	return err
+}
+
+func (mr *MultipartReader) GetHeader() *bytes.Buffer {
+	return mr.header
+}
+
+func (mr *MultipartReader) FormDataContentType() string {
+	return mr.writer.FormDataContentType()
+}
+
+func (mr *MultipartReader) Size() int {
+	return mr.header.Len() + mr.fileSize + len(mr.writer.Boundary()) + 8
 }
 
 func (*MultipartReader) Read(p []byte) (n int, err error) {
