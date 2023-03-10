@@ -1,7 +1,7 @@
 package fasthttp
 
 import (
-	"github.com/valyala/fasthttp"
+	"github.com/kgip/fasthttp"
 	"os"
 	"testing"
 )
