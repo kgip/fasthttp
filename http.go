@@ -1521,17 +1521,11 @@ func (req *Request) Write(w *bufio.Writer) error {
 		if mp, ok := req.bodyStream.(*MultipartReader); ok {
 			var err error
 			if err = req.Header.Write(w); err == nil {
-				for i := 0; i < len(mp.headers); i++ {
-					_, err = io.Copy(w, mp.headers[i])
-					if err != nil {
-						break
+				if _, err = io.Copy(w, mp.header); err == nil {
+					if err = w.Flush(); err == nil {
+						//send file with zero copy
+						_, err = io.Copy(mp.conn, mp.file)
 					}
-					err = w.Flush()
-					if err != nil {
-						break
-					}
-					//send file with zero copy
-					_, err = io.Copy(mp.conn, mp.files[i])
 				}
 			}
 			err1 := req.closeBodyStream()
@@ -2324,21 +2318,21 @@ func (req *Request) SetTimeout(t time.Duration) {
 }
 
 type MultipartReader struct {
-	headers []*bytes.Buffer
-	files   []*os.File
-	conn    net.Conn
+	header *bytes.Buffer
+	file   *os.File
+	conn   net.Conn
 }
 
-func (reader *MultipartReader) CreateFormFile(fieldname, filename string, file *os.File) error {
+func (mr *MultipartReader) CreateFormFile(fieldname, filename string, file *os.File) (*multipart.Writer, error) {
 	header := &bytes.Buffer{}
 	writer := multipart.NewWriter(header)
 	_, err := writer.CreateFormFile(fieldname, filename)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	reader.headers = append(reader.headers, header)
-	reader.files = append(reader.files, file)
-	return nil
+	mr.header = header
+	mr.file = file
+	return nil, nil
 }
 
 func (*MultipartReader) Read(p []byte) (n int, err error) {
@@ -2346,8 +2340,5 @@ func (*MultipartReader) Read(p []byte) (n int, err error) {
 }
 
 func (mr *MultipartReader) Close() error {
-	for i := 0; i < len(mr.files); i++ {
-		mr.files[i].Close()
-	}
-	return nil
+	return mr.file.Close()
 }
