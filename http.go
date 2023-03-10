@@ -1519,27 +1519,26 @@ func (req *Request) Write(w *bufio.Writer) error {
 
 	if req.bodyStream != nil {
 		if mp, ok := req.bodyStream.(*MultipartReader); ok {
-			if err := req.Header.Write(w); err == nil {
+			var err error
+			if err = req.Header.Write(w); err == nil {
 				for i := 0; i < len(mp.headers); i++ {
 					_, err = io.Copy(w, mp.headers[i])
 					if err != nil {
-						return err
+						break
 					}
 					err = w.Flush()
 					if err != nil {
-						return err
+						break
 					}
 					//send file with zero copy
 					_, err = io.Copy(mp.conn, mp.files[i])
-					mp.files[i].Close()
-					if err != nil {
-						return err
-					}
 				}
-				return nil
-			} else {
-				return err
 			}
+			err1 := req.closeBodyStream()
+			if err == nil {
+				err = err1
+			}
+			return err
 		}
 		return req.writeBodyStream(w)
 	}
@@ -2344,4 +2343,11 @@ func (reader *MultipartReader) CreateFormFile(fieldname, filename string, file *
 
 func (*MultipartReader) Read(p []byte) (n int, err error) {
 	return 0, nil
+}
+
+func (mr *MultipartReader) Close() error {
+	for i := 0; i < len(mr.files); i++ {
+		mr.files[i].Close()
+	}
+	return nil
 }

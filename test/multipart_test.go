@@ -11,6 +11,7 @@ func TestMultipart(t *testing.T) {
 	req.SetRequestURI("http://www.baidu.com/upload")
 	req.Header.SetMethod(fasthttp.MethodPost)
 	file, err := os.Open("test.txt")
+	defer file.Close()
 	if err != nil {
 		t.Log(err)
 	}
@@ -23,4 +24,5 @@ func TestMultipart(t *testing.T) {
 	if err != nil {
 		t.Log(err)
 	}
+	t.Log(string(resp.Body()))
 }
