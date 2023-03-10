@@ -1389,6 +1389,11 @@ func (c *HostClient) doNonNilReqResp(req *Request, resp *Response) (bool, error)
 	}
 
 	bw := c.acquireWriter(conn)
+	if req.bodyStream != nil {
+		if mp, ok := req.bodyStream.(*MultipartReader); ok {
+			mp.conn = conn
+		}
+	}
 	err = req.Write(bw)
 
 	if resetConnection {
